@@ -174,23 +174,24 @@ void leer_escenarios() {
 
 
 int main() {
-  leer_escenarios();
     char opcion;
+
     do {
         puts("========================================");
         puts("             Menu del juego             ");
         puts("========================================");
-        pust("Estado Actual");
         
-        puts("1)Recoger item(s)");
-        puts("2)Descartar Ítem(s)");
-        puts("3)Avanzar en una Dirección");
-        puts("4)Reiniciar Partida"); 
-        puts("5)Salir");
-    
+        mostrarEstadoActual();
+
+        puts("1) Recoger ítem(s)");
+        puts("2) Descartar ítem(s)");
+        puts("3) Avanzar en una Dirección");
+        puts("4) Reiniciar Partida");
+        puts("5) Salir");
+
         printf("Ingrese su opción: ");
         scanf(" %c", &opcion);
-    
+
         switch (opcion) {
             case '1':
                 recogerItems();
@@ -209,10 +210,13 @@ int main() {
                 break;
             default:
                 printf("Opción inválida, intenta de nuevo.\n");
-        presioneTeclaParaContinuar();
-        limpiarPantalla();
+        }
 
-  } while (opcion != '4');
+        printf("\nPresiona Enter para continuar...");
+        getchar(); getchar();  // Pausa para que el usuario vea el resultado
 
-  return 0;
+    } while (opcion != '5');
+
+    return 0;
 }
+
