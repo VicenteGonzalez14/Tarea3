@@ -5,11 +5,6 @@
 #include <string.h>
 
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <math.h>
-
 // Constantes para direcciones
 typedef enum { ARRIBA, ABAJO, IZQUIERDA, DERECHA, NINGUNA } Direccion;
 
@@ -39,6 +34,8 @@ typedef struct Conexion {
     struct Conexion* siguiente;
 } Conexion;
 
+
+
 // nodo
 typedef struct Escenario {
     int id; // identificador único
@@ -56,6 +53,27 @@ typedef struct {
 } Grafo;
 Grafo grafo = { NULL, NULL, NULL };
 
+typedef struct ConexionTemporal {
+    int origen;
+    int arriba;
+    int abajo;
+    int izquierda;
+    int derecha;
+    struct ConexionTemporal* siguiente;
+} ConexionTemporal;
+ConexionTemporal* conexionesTemp = NULL;
+
+
+typedef struct {
+    Item* inventario;    // Lista enlazada de ítems recogidos
+    int peso_total;      // Peso acumulado del inventario
+    int puntaje;         // Puntaje acumulado por ítems
+    int tiempo_restante; // Tiempo que queda para jugar
+    Escenario* escenario_actual; // Escenario donde está el jugador
+} Jugador;
+
+Jugador jugador;
+
 Escenario* buscarEscenarioPorId(int id) {
     Escenario* actual = grafo.escenarios;
     while (actual != NULL) {
@@ -63,6 +81,17 @@ Escenario* buscarEscenarioPorId(int id) {
         actual = actual->siguiente;
     }
     return NULL;
+}
+
+void agregarConexionTemporal(int origen, int arriba, int abajo, int izquierda, int derecha) {
+    ConexionTemporal* c = malloc(sizeof(ConexionTemporal));
+    c->origen = origen;
+    c->arriba = arriba;
+    c->abajo = abajo;
+    c->izquierda = izquierda;
+    c->derecha = derecha;
+    c->siguiente = conexionesTemp;
+    conexionesTemp = c;
 }
 
 Escenario* crearEscenario(int id, const char* descripcion) {
@@ -81,6 +110,12 @@ Escenario* crearEscenario(int id, const char* descripcion) {
     return esc;
 }
 
+int esUltimaStage(Escenario* actual) {
+    if (actual == NULL || grafo.salida == NULL) return 0;
+    return actual->id == grafo.salida->id;
+}
+
+
 
 void agregarConexion(Escenario* origen, Escenario* destino, Direccion dir) {
     Conexion* nueva = malloc(sizeof(Conexion));
@@ -90,16 +125,102 @@ void agregarConexion(Escenario* origen, Escenario* destino, Direccion dir) {
     origen->conexiones = nueva;
 }
 
-void agregarItem(Escenario* esc, const char* nombre, int valor, int peso) {
-    Item* nuevo = malloc(sizeof(Item));
-    strncpy(nuevo->nombre, nombre, 49);
-    nuevo->nombre[49] = '\0';
-    nuevo->valor = valor;
-    nuevo->peso = peso;
-    nuevo->siguiente = esc->items;
-    esc->items = nuevo;
+
+void mostrarEstadoActual() {
+    Escenario* esc = jugador.escenario_actual;
+    if (!esc) {
+        printf("Error: escenario actual no definido.\n");
+        return;
+    }
+
+    printf("\n--- Escenario actual: %s ---\n", esc->descripcion);
+
+    printf("Ítems disponibles:\n");
+    if (esc->items == NULL) {
+        printf("  (No hay ítems en este escenario)\n");
+    } else {
+        int idx = 1;
+        for (Item* it = esc->items; it != NULL; it = it->siguiente, idx++) {
+            printf("  %d) %s (Peso: %d, Valor: %d)\n", idx, it->nombre, it->peso, it->valor);
+        }
+    }
+
+    printf("\nInventario (%d kg, %d pts):\n", jugador.peso_total, jugador.puntaje);
+    if (jugador.inventario == NULL) {
+        printf("  (Inventario vacío)\n");
+    } else {
+        int idx = 1;
+        for (Item* it = jugador.inventario; it != NULL; it = it->siguiente, idx++) {
+            printf("  %d) %s (Peso: %d, Valor: %d)\n", idx, it->nombre, it->peso, it->valor);
+        }
+    }
+
+    printf("\nTiempo restante: %d\n", jugador.tiempo_restante);
+
+    printf("Direcciones disponibles:\n");
+    if (esc->conexiones == NULL) {
+        printf("  (No hay direcciones para avanzar)\n");
+    } else {
+        for (Conexion* c = esc->conexiones; c != NULL; c = c->siguiente) {
+            printf("  - %s\n", dir_to_str(c->direccion));
+        }
+    }
 }
 
+void inicializarJugador() {
+    jugador.inventario = NULL;
+    jugador.peso_total = 0;
+    jugador.puntaje = 0;
+    jugador.tiempo_restante = 10;  // o el tiempo que desees
+    jugador.escenario_actual = grafo.inicio;
+}
+
+
+void liberarInventario() {
+    Item* it = jugador.inventario;
+    while (it) {
+        Item* siguiente = it->siguiente;
+        free(it);
+        it = siguiente;
+    }
+    jugador.inventario = NULL;
+}
+
+void reiniciarPartida() {
+    liberarInventario();
+    inicializarJugador();
+    printf("Partida reiniciada.\n");
+}
+
+void conectarEscenarios() {
+    ConexionTemporal* c = conexionesTemp;
+    while (c != NULL) {
+        Escenario* origen = buscarEscenarioPorId(c->origen);
+        if (!origen) {
+            c = c->siguiente;
+            continue;
+        }
+
+        if (c->arriba != -1) {
+            Escenario* destino = buscarEscenarioPorId(c->arriba);
+            if (destino) agregarConexion(origen, destino, ARRIBA);
+        }
+        if (c->abajo != -1) {
+            Escenario* destino = buscarEscenarioPorId(c->abajo);
+            if (destino) agregarConexion(origen, destino, ABAJO);
+        }
+        if (c->izquierda != -1) {
+            Escenario* destino = buscarEscenarioPorId(c->izquierda);
+            if (destino) agregarConexion(origen, destino, IZQUIERDA);
+        }
+        if (c->derecha != -1) {
+            Escenario* destino = buscarEscenarioPorId(c->derecha);
+            if (destino) agregarConexion(origen, destino, DERECHA);
+        }
+
+        c = c->siguiente;
+    }
+}
 
 /**
  * Carga canciones desde un archivo CSV
@@ -112,19 +233,14 @@ void leer_escenarios() {
     }
 
     char **campos;
-    // Leer encabezado (y descartar)
-    campos = leer_linea_csv(archivo, ',');
-    if (campos) {
-        list_clean(campos);
-        free(campos);
-    }
+    campos = leer_linea_csv(archivo, ','); // Leer encabezados y descartar
+    if (campos) { list_clean(campos); free(campos); }
 
     while ((campos = leer_linea_csv(archivo, ',')) != NULL) {
         int id = atoi(campos[0]);
-        char* nombre = campos[1];
         char* descripcion = campos[2];
 
-        // Crear escenario o buscar si ya existe
+        // Crear escenario si no existe
         Escenario* esc = buscarEscenarioPorId(id);
         if (!esc) {
             esc = crearEscenario(id, descripcion);
@@ -144,38 +260,29 @@ void leer_escenarios() {
         list_clean(items);
         free(items);
 
-        // Guardar conexiones pendientes en una estructura temporal
         int arriba = atoi(campos[4]);
         int abajo = atoi(campos[5]);
         int izquierda = atoi(campos[6]);
         int derecha = atoi(campos[7]);
 
-        // Para las conexiones, por ahora guardamos los IDs y las conectaremos al final
-        // Guardamos en campos extra o estructura temporal
-        // Mejor guardamos las conexiones pendientes en un array estático o dinámico (depende)
+        agregarConexionTemporal(id, arriba, abajo, izquierda, derecha);
 
-        // Marcar inicio y salida
         int is_final = atoi(campos[8]);
-        if (is_final == 1) {
-            grafo.salida = esc;
-        }
-        if (strcmp(nombre, "Entrada principal") == 0) {
-            grafo.inicio = esc;
-        }
+        if (is_final) grafo.salida = esc;
+        if (strcmp(campos[1], "Entrada principal") == 0) grafo.inicio = esc;
 
         list_clean(campos);
         free(campos);
     }
     fclose(archivo);
-
-    // Ahora conectamos los escenarios entre sí (tras crear todos)
-    // Esta parte la debes implementar fuera de esta función, usando un segundo recorrido del archivo
 }
 
 
 int main() {
     char opcion;
-
+    leer_escenarios();
+    conectarEscenarios();
+    inicializarJugador(); 
     do {
         puts("========================================");
         puts("             Menu del juego             ");
